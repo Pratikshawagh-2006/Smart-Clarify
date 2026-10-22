@@ -4,7 +4,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from database import engine, get_db, Base
-import models, schemas, auth, email_utils
+import models, schemas, auth, email_utils, ai_utils  # <--- Yahan ai_utils import kiya hai
 
 Base.metadata.create_all(bind=engine)
 app = FastAPI()
@@ -130,11 +130,27 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------
-# STUDENT
+# STUDENT (AI-Powered Doubt Exchange)
 # ---------------------------------------------------------
 
 @app.post("/student/questions")
 def submit_question(q: schemas.QuestionCreate, db: Session = Depends(get_db)):
+    # 1. Database se sabhi purane questions fetch karein
+    db_questions = db.query(models.Question.question_text).all()
+    existing_questions = [row[0] for row in db_questions]
+
+    # 2. AI Semantic Similarity Check run karein
+    matched_question, score = ai_utils.check_doubt_similarity(q.question_text, existing_questions)
+
+    if matched_question:
+        return {
+            "status": "duplicate_found",
+            "message": "A similar doubt has already been asked!",
+            "matched_with": matched_question,
+            "similarity_score": round(score * 100, 2)
+        }
+
+    # 3. Agar duplicate nahi hai, toh normal database me save karein
     new_q = models.Question(
         student_id=q.student_id,
         subject=q.subject,
@@ -143,7 +159,7 @@ def submit_question(q: schemas.QuestionCreate, db: Session = Depends(get_db)):
     db.add(new_q)
     db.commit()
     db.refresh(new_q)
-    return {"id": new_q.id, "status": new_q.status}
+    return {"id": new_q.id, "status": new_q.status, "message": "Doubt submitted successfully!"}
 
 
 @app.get("/student/questions/{student_id}")
@@ -210,7 +226,7 @@ def answer_question(question_id: int, answer: schemas.AnswerCreate, db: Session 
 
 
 # ---------------------------------------------------------
-# NEW: HOD DASHBOARD
+# HOD DASHBOARD
 # ---------------------------------------------------------
 
 @app.get("/hod/teacher-performance")
