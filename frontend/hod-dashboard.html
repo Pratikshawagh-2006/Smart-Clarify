@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HOD dashboard · SmartClarify</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main">
+        <header class="page-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+            <div>
+                <h1>Department overview</h1>
+                <p>How doubts are being handled, and who is handling them.</p>
+            </div>
+            <button class="ghost" id="refresh-btn" type="button">Refresh</button>
+        </header>
+
+        <section class="stats" id="stats"></section>
+
+        <div class="hod-grid">
+            <section class="card" id="overview">
+                <h2>Resolution rate</h2>
+                <p class="hint">Share of all questions that have been resolved.</p>
+                <div class="donut-wrap" id="donut"></div>
+            </section>
+
+            <section class="card" id="performance">
+                <h2>Teacher performance</h2>
+                <p class="hint">Questions answered by each teacher.</p>
+                <div id="leaders" style="margin-top:8px"></div>
+            </section>
+        </div>
+    </main>
+</div>
+
+<script src="dashboard.js"></script>
+<script>
+if (requireRole("hod")) {
+    buildShell("HOD", [
+        { href: "#overview", icon: "chart", label: "Overview" },
+        { href: "#performance", icon: "trophy", label: "Teacher performance" }
+    ]);
+    document.getElementById("refresh-btn").innerHTML = icon("refresh") + "Refresh";
+
+    function renderStats(d) {
+        document.getElementById("stats").innerHTML =
+            statCard("users", "", d.total_students, "Students") +
+            statCard("users", "", d.total_teachers, "Teachers") +
+            statCard("message", "", d.total_questions, "Questions asked") +
+            statCard("clock", "amber", d.pending_questions, "Pending");
+    }
+
+    function renderDonut(d) {
+        const total = d.total_questions || 0;
+        const resolved = d.resolved_questions || 0;
+        const pending = d.pending_questions || 0;
+        const other = Math.max(total - resolved - pending, 0);
+        const pct = total ? Math.round((resolved / total) * 100) : 0;
+        const C = 2 * Math.PI * 70;   // circumference for r = 70
+
+        document.getElementById("donut").innerHTML = `
+            <div class="donut">
+                <svg viewBox="0 0 168 168" role="img" aria-label="${pct} percent of questions resolved">
+                    <circle class="track" cx="84" cy="84" r="70"></circle>
+                    <circle class="fill" id="donut-fill" cx="84" cy="84" r="70"
+                            stroke-dasharray="${C}" stroke-dashoffset="${C}"></circle>
+                </svg>
+                <div class="mid"><div><div class="pct">${pct}%</div><div class="cap">resolved</div></div></div>
+            </div>
+            <div class="legend">
+                <div><span><span class="dot" style="background:var(--brand)"></span>Resolved</span><b>${resolved}</b></div>
+                <div><span><span class="dot" style="background:#f0a41a"></span>Pending</span><b>${pending}</b></div>
+                <div><span><span class="dot" style="background:var(--line-strong)"></span>Escalated / auto</span><b>${other}</b></div>
+            </div>`;
+
+        // one animated moment: the ring fills on load
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            const el = document.getElementById("donut-fill");
+            if (el) el.style.strokeDashoffset = C * (1 - (total ? resolved / total : 0));
+        }));
+    }
+
+    function renderLeaders(rows) {
+        const box = document.getElementById("leaders");
+        if (!rows.length) {
+            box.innerHTML = `<div class="empty"><strong>No teachers yet</strong>Teachers appear here once they register and verify their email.</div>`;
+            return;
+        }
+        const max = Math.max(...rows.map(r => r.questions_resolved), 1);
+        box.innerHTML = rows.map((r, i) => `
+            <div class="leader ${i === 0 && r.questions_resolved > 0 ? "first" : ""}">
+                <div class="rank">${i + 1}</div>
+                <div class="who">
+                    <div class="nm">${esc(r.name)}</div>
+                    <div class="em">${esc(r.email)}</div>
+                </div>
+                <div class="bar"><span data-w="${Math.round((r.questions_resolved / max) * 100)}"></span></div>
+                <div class="cnt">${esc(r.questions_resolved)} <small>answered</small></div>
+            </div>`).join("");
+
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            box.querySelectorAll(".bar span").forEach(s => { s.style.width = s.dataset.w + "%"; });
+        }));
+    }
+
+    async function loadAll() {
+        try {
+            const d = await api("/hod/overview");
+            renderStats(d);
+            renderDonut(d);
+        } catch (e) {
+            document.getElementById("stats").innerHTML = `<div class="message error">${esc(e.message)}</div>`;
+        }
+        try {
+            renderLeaders(await api("/hod/teacher-performance"));
+        } catch (e) {
+            document.getElementById("leaders").innerHTML = `<div class="message error">${esc(e.message)}</div>`;
+        }
+    }
+
+    document.getElementById("refresh-btn").addEventListener("click", loadAll);
+    loadAll();
+}
+</script>
+</body>
+</html>

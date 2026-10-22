@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Student dashboard · SmartClarify</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main">
+        <header class="page-head">
+            <h1>Your doubts</h1>
+            <p>Ask a question, then come back here to read the teacher's answer.</p>
+        </header>
+
+        <section class="stats" id="stats"></section>
+
+        <div class="grid-2">
+            <section class="card ask-card" id="ask">
+                <h2>Ask a doubt</h2>
+                <p class="hint">Be specific. Clear questions get faster answers.</p>
+                <form id="ask-form">
+                    <label for="subject">Subject</label>
+                    <input type="text" id="subject" maxlength="100" list="subject-list" placeholder="e.g. Data Structures" required>
+                    <datalist id="subject-list"></datalist>
+
+                    <label for="question">Your question</label>
+                    <textarea id="question" placeholder="What are you stuck on? Mention the topic, and what you've already tried." required></textarea>
+
+                    <button type="submit" class="primary">Send question</button>
+                    <div class="message" id="ask-message"></div>
+                </form>
+            </section>
+
+            <section id="questions">
+                <div class="section-head">
+                    <h2>My questions</h2>
+                    <div class="chips" id="chips"></div>
+                </div>
+                <div id="my-questions"></div>
+            </section>
+        </div>
+    </main>
+</div>
+
+<script src="dashboard.js"></script>
+<script>
+if (requireRole("student")) {
+    buildShell("Student", [
+        { href: "#ask", icon: "ask", label: "Ask a doubt" },
+        { href: "#questions", icon: "list", label: "My questions" }
+    ]);
+
+    const me = currentUser();
+    let all = [];
+    let filter = "all";
+
+    const isAwaiting = q => q.status === "pending" || q.status === "escalated";
+    const isAnswered = q => q.status === "resolved" || q.status === "auto_resolved";
+
+    function renderStats() {
+        document.getElementById("stats").innerHTML =
+            statCard("message", "", all.length, "Questions asked") +
+            statCard("clock", "amber", all.filter(isAwaiting).length, "Waiting for a reply") +
+            statCard("check", "green", all.filter(isAnswered).length, "Answered");
+    }
+
+    function renderChips() {
+        const opts = [
+            ["all", "All", all.length],
+            ["awaiting", "Waiting", all.filter(isAwaiting).length],
+            ["answered", "Answered", all.filter(isAnswered).length]
+        ];
+        document.getElementById("chips").innerHTML = opts.map(([key, label, n]) =>
+            `<button type="button" class="chip ${filter === key ? "active" : ""}" data-filter="${key}">${label}<span class="n">${n}</span></button>`
+        ).join("");
+    }
+
+    function renderList() {
+        const box = document.getElementById("my-questions");
+        const list = all.filter(q => filter === "all" ? true : filter === "awaiting" ? isAwaiting(q) : isAnswered(q));
+
+        if (!all.length) {
+            box.innerHTML = `<div class="empty"><strong>No questions yet</strong>Use the form to ask your first doubt.</div>`;
+            return;
+        }
+        if (!list.length) {
+            box.innerHTML = `<div class="empty"><strong>Nothing here</strong>No questions match this filter.</div>`;
+            return;
+        }
+
+        box.innerHTML = list.map(q => {
+            let tail;
+            if (q.answer_text) {
+                tail = `<div class="answer">
+                            <div class="answer-by"><span class="mini">T</span>Teacher's answer</div>
+                            <p>${esc(q.answer_text)}</p>
+                        </div>`;
+            } else if (q.status === "escalated") {
+                tail = `<div class="waiting">${icon("alert")}Escalated. A teacher will take a closer look.</div>`;
+            } else {
+                tail = `<div class="waiting">${icon("clock")}Waiting for a teacher to reply.</div>`;
+            }
+            return `<article class="q-card s-${esc(q.status)}">
+                        <div class="q-head"><span class="q-subject">${esc(q.subject)}</span>${badge(q.status)}</div>
+                        <p class="q-text">${esc(q.question_text)}</p>
+                        ${tail}
+                    </article>`;
+        }).join("");
+    }
+
+    function renderSubjects() {
+        const subjects = [...new Set(all.map(q => q.subject).filter(Boolean))];
+        document.getElementById("subject-list").innerHTML = subjects.map(s => `<option value="${esc(s)}">`).join("");
+    }
+
+    function renderAll() { renderStats(); renderChips(); renderList(); renderSubjects(); }
+
+    async function loadQuestions() {
+        try {
+            all = await api(`/student/questions/${me.id}`);
+            renderAll();
+        } catch (e) {
+            document.getElementById("my-questions").innerHTML = `<div class="message error">${esc(e.message)}</div>`;
+        }
+    }
+
+    document.getElementById("chips").addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-filter]");
+        if (!btn) return;
+        filter = btn.dataset.filter;
+        renderChips();
+        renderList();
+    });
+
+    document.getElementById("ask-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById("ask-message");
+        msg.className = "message";
+        try {
+            await api("/student/questions", "POST", {
+                student_id: me.id,
+                subject: document.getElementById("subject").value.trim(),
+                question_text: document.getElementById("question").value.trim()
+            });
+            toast("Question sent");
+            e.target.reset();
+            loadQuestions();
+        } catch (err) {
+            msg.textContent = err.message;
+            msg.className = "message error";
+        }
+    });
+
+    loadQuestions();
+}
+</script>
+</body>
+</html>

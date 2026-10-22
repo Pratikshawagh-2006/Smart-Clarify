@@ -5,7 +5,7 @@ class UserRegister(BaseModel):
     name: str
     email: EmailStr
     password: str
-    role: str  # "student" or "teacher"
+    role: str  # "student", "teacher", or "hod"
 
 
 class UserLogin(BaseModel):
@@ -19,7 +19,16 @@ class QuestionCreate(BaseModel):
     question_text: str
 
 
-# NEW: used by /teacher/questions/{id}/answer
 class AnswerCreate(BaseModel):
     teacher_id: int
     answer_text: str
+
+
+# NEW: OTP verification schemas
+class OTPVerify(BaseModel):
+    email: EmailStr
+    otp: str
+
+
+class ResendOTP(BaseModel):
+    email: EmailStr

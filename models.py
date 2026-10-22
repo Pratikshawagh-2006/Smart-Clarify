@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Text, Enum, ForeignKey, TIMESTAMP, func
+from sqlalchemy import Column, Integer, String, Text, Enum, ForeignKey, TIMESTAMP, Boolean, func
 from sqlalchemy.orm import relationship
 from database import Base
+
 
 class User(Base):
     __tablename__ = "users"
@@ -8,8 +9,14 @@ class User(Base):
     name = Column(String(100))
     email = Column(String(100), unique=True, index=True)
     password_hash = Column(String(255))
-    role = Column(Enum("student", "teacher"))
+    role = Column(Enum("student", "teacher", "hod"))
     created_at = Column(TIMESTAMP, server_default=func.now())
+
+    # NEW: email verification fields
+    is_verified = Column(Boolean, default=False)
+    otp_code = Column(String(6), nullable=True)
+    otp_expiry = Column(TIMESTAMP, nullable=True)
+
 
 class Question(Base):
     __tablename__ = "questions"
@@ -19,6 +26,7 @@ class Question(Base):
     question_text = Column(Text)
     status = Column(Enum("pending", "auto_resolved", "escalated", "resolved"), default="pending")
     created_at = Column(TIMESTAMP, server_default=func.now())
+
 
 class Answer(Base):
     __tablename__ = "answers"

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teacher dashboard · SmartClarify</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="main">
+        <header class="page-head">
+            <h1>Student questions</h1>
+            <p>Pick a question, write your answer, and the student sees it right away.</p>
+        </header>
+
+        <section class="stats" id="stats"></section>
+
+        <section id="queue">
+            <div class="section-head">
+                <h2 id="queue-title">Pending</h2>
+                <div class="chips" id="chips"></div>
+            </div>
+            <div id="question-list"></div>
+        </section>
+    </main>
+</div>
+
+<script src="dashboard.js"></script>
+<script>
+if (requireRole("teacher")) {
+    buildShell("Teacher", [
+        { href: "#queue", icon: "inbox", label: "Question queue" }
+    ]);
+
+    const me = currentUser();
+    const STATUSES = ["pending", "escalated", "resolved", "auto_resolved"];
+    const data = { pending: [], escalated: [], resolved: [], auto_resolved: [] };
+    let tab = "pending";
+    let openId = null;
+
+    function renderStats() {
+        document.getElementById("stats").innerHTML =
+            statCard("clock", "amber", data.pending.length, "Waiting for an answer") +
+            statCard("alert", "red", data.escalated.length, "Escalated") +
+            statCard("check", "green", data.resolved.length, "Resolved");
+    }
+
+    function renderChips() {
+        document.getElementById("chips").innerHTML = STATUSES.map(s =>
+            `<button type="button" class="chip ${tab === s ? "active" : ""}" data-tab="${s}">${esc(statusLabel(s))}<span class="n">${data[s].length}</span></button>`
+        ).join("");
+        document.getElementById("queue-title").textContent = statusLabel(tab);
+    }
+
+    function renderList() {
+        const box = document.getElementById("question-list");
+        const list = data[tab];
+
+        if (!list.length) {
+            const text = tab === "pending" ? "No pending questions. You're all caught up." : `No ${statusLabel(tab).toLowerCase()} questions.`;
+            box.innerHTML = `<div class="empty"><strong>Nothing to show</strong>${esc(text)}</div>`;
+            return;
+        }
+
+        box.innerHTML = list.map(q => {
+            const canAnswer = q.status === "pending" || q.status === "escalated";
+            const open = openId === q.id;
+            return `<article class="q-card s-${esc(q.status)}" data-id="${q.id}">
+                <div class="q-head"><span class="q-subject">${esc(q.subject)}</span>${badge(q.status)}</div>
+                <p class="q-text">${esc(q.question_text)}</p>
+                <div class="q-meta">Question #${q.id} from student #${q.student_id}</div>
+                ${canAnswer ? (open ? `
+                    <div class="composer">
+                        <label for="ans-${q.id}">Your answer</label>
+                        <textarea id="ans-${q.id}" placeholder="Explain it the way you would in class."></textarea>
+                        <div class="row">
+                            <button type="button" class="primary small" data-send="${q.id}">Send answer</button>
+                            <button type="button" class="ghost" style="margin-top:14px" data-cancel="1">Cancel</button>
+                        </div>
+                        <div class="message" id="msg-${q.id}"></div>
+                    </div>` : `
+                    <div class="card-actions"><button type="button" class="ghost" data-open="${q.id}">${icon("send")}Write answer</button></div>`) : ""}
+            </article>`;
+        }).join("");
+
+        if (openId) {
+            const ta = document.getElementById(`ans-${openId}`);
+            if (ta) ta.focus();
+        }
+    }
+
+    function renderAll() { renderStats(); renderChips(); renderList(); }
+
+    async function loadAll() {
+        try {
+            const results = await Promise.all(STATUSES.map(s => api(`/teacher/questions?status=${encodeURIComponent(s)}`)));
+            STATUSES.forEach((s, i) => { data[s] = results[i]; });
+            renderAll();
+        } catch (e) {
+            document.getElementById("question-list").innerHTML = `<div class="message error">${esc(e.message)}</div>`;
+        }
+    }
+
+    document.getElementById("chips").addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-tab]");
+        if (!btn) return;
+        tab = btn.dataset.tab;
+        openId = null;
+        renderChips();
+        renderList();
+    });
+
+    document.getElementById("question-list").addEventListener("click", async (e) => {
+        const openBtn = e.target.closest("[data-open]");
+        if (openBtn) { openId = Number(openBtn.dataset.open); renderList(); return; }
+
+        if (e.target.closest("[data-cancel]")) { openId = null; renderList(); return; }
+
+        const sendBtn = e.target.closest("[data-send]");
+        if (!sendBtn) return;
+
+        const id = Number(sendBtn.dataset.send);
+        const text = document.getElementById(`ans-${id}`).value.trim();
+        const msg = document.getElementById(`msg-${id}`);
+        if (!text) { msg.textContent = "Write an answer before sending."; msg.className = "message error"; return; }
+
+        sendBtn.disabled = true;
+        try {
+            await api(`/teacher/questions/${id}/answer`, "POST", { teacher_id: me.id, answer_text: text });
+            toast("Answer sent");
+            openId = null;
+            loadAll();
+        } catch (err) {
+            sendBtn.disabled = false;
+            msg.textContent = err.message;
+            msg.className = "message error";
+        }
+    });
+
+    loadAll();
+}
+</script>
+</body>
+</html>

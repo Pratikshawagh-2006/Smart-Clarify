@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teacher portal · SmartClarify</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Figtree:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="split">
+    <section class="split-brand">
+        <div class="logo">
+            <span class="mark"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8.5 10l2.5 2.5L15.5 8"/></svg></span>
+            SmartClarify
+        </div>
+
+        <div class="brand-copy">
+            <h2>Doubts get answered. Progress gets seen.</h2>
+            <p>Students ask, teachers reply from one queue, and the HOD can see who is resolving what.</p>
+        </div>
+
+        <div class="chat-demo" aria-hidden="true">
+            <div class="bubble q"><small>Student</small>What is the difference between a stack and a queue?</div>
+            <div class="bubble a"><small>Teacher</small>A stack is last-in, first-out. A queue is first-in, first-out.</div>
+        </div>
+    </section>
+
+    <section class="split-main">
+        <div class="form-wrap">
+            <span class="role-pill" id="role-label">Teacher portal</span>
+            <h1>Welcome to SmartClarify</h1>
+            <p class="lead">Log in to continue, or create a new account.</p>
+
+            <div class="tabs">
+                <button class="tab-btn active" id="login-tab-btn" type="button">Log in</button>
+                <button class="tab-btn" id="register-tab-btn" type="button">Register</button>
+            </div>
+
+            <!-- LOGIN FORM -->
+            <form id="login-form">
+                <label for="login-email">Email</label>
+                <input type="email" id="login-email" autocomplete="email" required>
+
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" autocomplete="current-password" required>
+
+                <button type="submit" class="primary">Log in</button>
+                <div class="message" id="login-message"></div>
+            </form>
+
+            <!-- REGISTER FORM -->
+            <form id="register-form" class="hidden">
+                <label for="reg-name">Full name</label>
+                <input type="text" id="reg-name" autocomplete="name" required>
+
+                <label for="reg-email">Email</label>
+                <input type="email" id="reg-email" autocomplete="email" required>
+
+                <label for="reg-password">Password</label>
+                <input type="password" id="reg-password" autocomplete="new-password" required>
+
+                <button type="submit" class="primary">Create account</button>
+                <div class="message" id="register-message"></div>
+            </form>
+
+            <!-- OTP FORM -->
+            <form id="otp-form" class="hidden">
+                <input type="hidden" id="otp-email">
+                <label for="otp-code">Enter the OTP sent to your email</label>
+                <input type="text" id="otp-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" required>
+
+                <button type="submit" class="primary">Verify OTP</button>
+                <button type="button" id="resend-otp-btn" class="primary secondary">Resend OTP</button>
+                <div class="message" id="otp-message"></div>
+            </form>
+
+            <a href="index.html" class="back-link">&larr; Back to portals</a>
+        </div>
+    </section>
+</div>
+
+<script>
+    const ROLE = "teacher";
+    const ROLE_LABEL = "Teacher portal";
+</script>
+<script src="auth.js"></script>
+</body>
+</html>
