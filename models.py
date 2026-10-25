@@ -25,6 +25,8 @@ class Question(Base):
     subject = Column(String(100))
     question_text = Column(Text)
     status = Column(Enum("pending", "auto_resolved", "escalated", "resolved"), default="pending")
+    # NEW: answer written by the AI chatbot (status = "auto_resolved")
+    ai_answer = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
 

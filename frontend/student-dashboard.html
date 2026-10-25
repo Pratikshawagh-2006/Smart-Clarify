@@ -48,6 +48,24 @@
     </main>
 </div>
 
+<button type="button" class="chat-fab" id="chat-fab" aria-label="Open AI assistant">
+    <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    Ask AI
+</button>
+
+<section class="chat-panel" id="chat-panel" aria-label="AI assistant">
+    <div class="chat-head">
+        <div><strong>SmartClarify AI</strong><small>Unsure questions go to your teacher</small></div>
+        <button type="button" class="chat-close" id="chat-close" aria-label="Close chat">&times;</button>
+    </div>
+    <div class="chat-subject"><input type="text" id="chat-subject" maxlength="100" placeholder="Subject (optional), e.g. Data Structures"></div>
+    <div class="chat-body" id="chat-body"></div>
+    <form class="chat-form" id="chat-form">
+        <textarea id="chat-input" placeholder="Type your doubt..." required></textarea>
+        <button type="submit" id="chat-send">Send</button>
+    </form>
+</section>
+
 <script src="dashboard.js"></script>
 <script>
 if (requireRole("student")) {
@@ -101,8 +119,13 @@ if (requireRole("student")) {
                             <div class="answer-by"><span class="mini">T</span>Teacher's answer</div>
                             <p>${esc(q.answer_text)}</p>
                         </div>`;
+            } else if (q.ai_answer) {
+                tail = `<div class="answer ai-answer">
+                            <div class="answer-by"><span class="mini">AI</span>AI answer</div>
+                            <p>${esc(q.ai_answer)}</p>
+                        </div>`;
             } else if (q.status === "escalated") {
-                tail = `<div class="waiting">${icon("alert")}Escalated. A teacher will take a closer look.</div>`;
+                tail = `<div class="waiting">${icon("alert")}Forwarded to a teacher. They will reply here.</div>`;
             } else {
                 tail = `<div class="waiting">${icon("clock")}Waiting for a teacher to reply.</div>`;
             }
@@ -154,6 +177,75 @@ if (requireRole("student")) {
         } catch (err) {
             msg.textContent = err.message;
             msg.className = "message error";
+        }
+    });
+
+    /* ---------- AI chat widget ---------- */
+    const chatPanel = document.getElementById("chat-panel");
+    const chatBody = document.getElementById("chat-body");
+    const chatInput = document.getElementById("chat-input");
+    const chatSend = document.getElementById("chat-send");
+    let chatHistory = [];
+
+    function addMsg(kind, text) {
+        const d = document.createElement("div");
+        d.className = "msg " + kind;
+        d.textContent = text;
+        chatBody.appendChild(d);
+        chatBody.scrollTop = chatBody.scrollHeight;
+        return d;
+    }
+
+    function toggleChat(open) {
+        chatPanel.classList.toggle("open", open);
+        if (open) {
+            if (!chatBody.children.length) addMsg("ai", "Hi! Ask me any doubt. If I'm not sure, I'll forward it to a teacher.");
+            chatInput.focus();
+        }
+    }
+    document.getElementById("chat-fab").addEventListener("click", () => toggleChat(!chatPanel.classList.contains("open")));
+    document.getElementById("chat-close").addEventListener("click", () => toggleChat(false));
+
+    chatInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); document.getElementById("chat-form").requestSubmit(); }
+    });
+
+    document.getElementById("chat-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const text = chatInput.value.trim();
+        if (!text) return;
+
+        addMsg("user", text);
+        chatInput.value = "";
+        chatSend.disabled = true;
+        const typing = addMsg("ai typing", "Thinking...");
+
+        try {
+            const res = await api("/student/chat", "POST", {
+                student_id: me.id,
+                subject: document.getElementById("chat-subject").value.trim() || "General",
+                question_text: text,
+                history: chatHistory.slice(-6)
+            });
+            typing.remove();
+            chatHistory.push({ role: "user", text });
+            
+            // Updated condition to handle AI answer and duplicates cleanly
+            if (res.route === "ai" || res.route === "duplicate") {
+                addMsg("ai", res.answer);
+                if (res.route === "ai") {
+                    chatHistory.push({ role: "ai", text: res.answer });
+                }
+            } else {
+                addMsg("note", res.message);
+            }
+            loadQuestions();
+        } catch (err) {
+            typing.remove();
+            addMsg("note", err.message);
+        } finally {
+            chatSend.disabled = false;
+            chatInput.focus();
         }
     });
 
