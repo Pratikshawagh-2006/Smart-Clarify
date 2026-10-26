@@ -18,7 +18,10 @@
                 <h1>Department overview</h1>
                 <p>How doubts are being handled, and who is handling them.</p>
             </div>
-            <button class="ghost" id="refresh-btn" type="button">Refresh</button>
+            <div style="display:flex; gap: 8px;">
+                <button class="primary" id="export-btn" type="button">Export Reports (CSV)</button>
+                <button class="ghost" id="refresh-btn" type="button">Refresh</button>
+            </div>
         </header>
 
         <section class="stats" id="stats"></section>
@@ -79,7 +82,6 @@ if (requireRole("hod")) {
                 <div><span><span class="dot" style="background:var(--line-strong)"></span>Escalated / auto</span><b>${other}</b></div>
             </div>`;
 
-        // one animated moment: the ring fills on load
         requestAnimationFrame(() => requestAnimationFrame(() => {
             const el = document.getElementById("donut-fill");
             if (el) el.style.strokeDashoffset = C * (1 - (total ? resolved / total : 0));
@@ -125,6 +127,29 @@ if (requireRole("hod")) {
     }
 
     document.getElementById("refresh-btn").addEventListener("click", loadAll);
+    
+    // CSV Export Handler
+    document.getElementById("export-btn").addEventListener("click", async () => {
+        try {
+            const token = localStorage.getItem("sc_token");
+            const res = await fetch("http://127.0.0.1:8000/hod/export-reports", {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error("Failed to download report");
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "smartclarify_report.csv";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            toast("Report downloaded successfully");
+        } catch (e) {
+            toast(e.message, "error");
+        }
+    });
+
     loadAll();
 }
 </script>

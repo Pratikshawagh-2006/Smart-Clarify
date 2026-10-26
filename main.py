@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta
+import csv
+import io
 
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from database import engine, get_db, Base
@@ -15,7 +18,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 @app.get("/")
 def root():
@@ -156,12 +158,6 @@ def submit_question(q: schemas.QuestionCreate, db: Session = Depends(get_db)):
 
 @app.post("/student/chat")
 def student_chat(req: schemas.ChatRequest, db: Session = Depends(get_db)):
-    """
-    1. Pehle semantic similarity check karega ki kya yeh duplicate doubt hai.
-    2. Agar duplicate nahi hai, toh Gemini AI auto-routing handle karega:
-       - AI answer -> "auto_resolved"
-       - Escalated -> "pending" (Teacher queue ke liye)
-    """
     subject = req.subject.strip() or "General"
     
     db_questions = db.query(models.Question.question_text).all()
@@ -185,12 +181,15 @@ def student_chat(req: schemas.ChatRequest, db: Session = Depends(get_db)):
     else:
         status, ai_answer = "pending", None
 
+    priority = decision.get("priority", "Normal")
+
     new_q = models.Question(
         student_id=req.student_id,
         subject=subject,
         question_text=req.question_text,
         status=status,
-        ai_answer=ai_answer
+        ai_answer=ai_answer,
+        priority=priority if hasattr(models.Question, 'priority') else "Normal"
     )
     db.add(new_q)
     db.commit()
@@ -201,8 +200,9 @@ def student_chat(req: schemas.ChatRequest, db: Session = Depends(get_db)):
         "status": new_q.status,
         "route": decision["route"],
         "answer": ai_answer,
+        "priority": priority,
         "confidence": round(decision["confidence"], 2),
-        "message": "Answered by AI." if ai_answer else "Forwarded to a teacher. It has been added to the pending queue."
+        "message": "Answered by AI." if ai_answer else "Forwarded to a teacher (Pending queue)."
     }
 
 
@@ -228,6 +228,23 @@ def get_my_questions(student_id: int, db: Session = Depends(get_db)):
         })
 
     return result
+
+
+@app.get("/student/analytics/{student_id}")
+def student_analytics(student_id: int, db: Session = Depends(get_db)):
+    questions = db.query(models.Question).filter(models.Question.student_id == student_id).all()
+    
+    total = len(questions)
+    auto_resolved = sum(1 for q in questions if q.status == "auto_resolved")
+    resolved_by_teacher = sum(1 for q in questions if q.status == "resolved")
+    pending = sum(1 for q in questions if q.status == "pending")
+
+    return {
+        "total_doubts": total,
+        "auto_resolved_by_ai": auto_resolved,
+        "resolved_by_teachers": resolved_by_teacher,
+        "pending_doubts": pending
+    }
 
 
 # ---------------------------------------------------------
@@ -307,3 +324,22 @@ def hod_overview(db: Session = Depends(get_db)):
         "resolved_questions": resolved_questions,
         "pending_questions": pending_questions
     }
+
+
+@app.get("/hod/export-reports")
+def export_doubt_reports(db: Session = Depends(get_db)):
+    questions = db.query(models.Question).all()
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID", "Student ID", "Subject", "Question", "Status", "AI Answer"])
+
+    for q in questions:
+        writer.writerow([q.id, q.student_id, q.subject, q.question_text, q.status, q.ai_answer or "N/A"])
+    
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=smartclarify_report.csv"}
+    )

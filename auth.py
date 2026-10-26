@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 import os
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-SECRET_KEY = os.getenv("SECRET_KEY")
+
+SECRET_KEY = os.getenv("SECRET_KEY", "your_super_secret_key_12345")
 ALGORITHM = "HS256"
 
 def hash_password(password: str):
@@ -15,5 +16,6 @@ def verify_password(plain, hashed):
 
 def create_token(data: dict):
     to_encode = data.copy()
-    to_encode["exp"] = datetime.utcnow() + timedelta(hours=24)
+    expire = datetime.utcnow() + timedelta(hours=24)
+    to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)

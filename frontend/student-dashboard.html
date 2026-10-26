@@ -19,6 +19,9 @@
         </header>
 
         <section class="stats" id="stats"></section>
+        
+        <!-- Analytics Section Added -->
+        <section class="stats" id="student-analytics" style="margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;"></section>
 
         <div class="grid-2">
             <section class="card ask-card" id="ask">
@@ -88,6 +91,19 @@ if (requireRole("student")) {
             statCard("check", "green", all.filter(isAnswered).length, "Answered");
     }
 
+    async function loadAnalytics() {
+        try {
+            const data = await api(`/student/analytics/${me.id}`);
+            document.getElementById("student-analytics").innerHTML =
+                statCard("chart", "blue", data.total_doubts, "Total Doubts") +
+                statCard("check", "green", data.auto_resolved_by_ai, "AI Resolved") +
+                statCard("check", "green", data.resolved_by_teachers, "Teacher Resolved") +
+                statCard("clock", "amber", data.pending_doubts, "Pending Doubts");
+        } catch (e) {
+            console.error("Failed to load analytics", e);
+        }
+    }
+
     function renderChips() {
         const opts = [
             ["all", "All", all.length],
@@ -142,7 +158,7 @@ if (requireRole("student")) {
         document.getElementById("subject-list").innerHTML = subjects.map(s => `<option value="${esc(s)}">`).join("");
     }
 
-    function renderAll() { renderStats(); renderChips(); renderList(); renderSubjects(); }
+    function renderAll() { renderStats(); renderChips(); renderList(); renderSubjects(); loadAnalytics(); }
 
     async function loadQuestions() {
         try {
@@ -230,7 +246,6 @@ if (requireRole("student")) {
             typing.remove();
             chatHistory.push({ role: "user", text });
             
-            // Updated condition to handle AI answer and duplicates cleanly
             if (res.route === "ai" || res.route === "duplicate") {
                 addMsg("ai", res.answer);
                 if (res.route === "ai") {
